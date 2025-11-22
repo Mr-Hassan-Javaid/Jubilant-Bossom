@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, CornerDownLeft, MessageSquare } from 'lucide-react';
 import { ChatMessage } from '../types';
 import { sendMessageToGemini } from '../services/geminiService';
+import { evaluateUserMessage, evaluateModelResponse } from '../services/guardrails';
 
 interface Props {
   onOpenContact?: () => void;
@@ -54,18 +55,38 @@ export const AIChat: React.FC<Props> = ({ onOpenContact }) => {
     const userMsg: ChatMessage = { role: 'user', text: userInput, timestamp: Date.now() };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
+    
+    // Check user message against guardrails
+    const userCheck = evaluateUserMessage(userInput);
+    if (!userCheck.allowed) {
+      // Message blocked - show safe replacement message
+      const blockedMsg: ChatMessage = { 
+        role: 'model', 
+        text: userCheck.replacementMessage || "I can't help with that. I'm a portfolio assistant focused on Studio Aether's work and services.",
+        timestamp: Date.now()
+      };
+      setMessages(prev => [...prev, blockedMsg]);
+      return;
+    }
+    
     setIsLoading(true);
 
     const responseText = await sendMessageToGemini(messages, userInput);
     
-    const modelMsg: ChatMessage = { role: 'model', text: responseText, timestamp: Date.now() };
+    // Check model response against guardrails (defense-in-depth)
+    const responseCheck = evaluateModelResponse(responseText);
+    const finalResponseText = responseCheck.allowed 
+      ? responseText 
+      : (responseCheck.replacementMessage || "I apologize, but I can't provide that information. I'm here to help with Studio Aether's portfolio, services, or booking.");
+    
+    const modelMsg: ChatMessage = { role: 'model', text: finalResponseText, timestamp: Date.now() };
     setMessages(prev => [...prev, modelMsg]);
     setIsLoading(false);
 
     // Check if user wants to book/contact and assistant mentioned opening contact form
     const shouldOpenContact = checkBookingIntent(userInput) || 
-                              responseText.toLowerCase().includes('contact form') ||
-                              responseText.toLowerCase().includes('opening contact');
+                              finalResponseText.toLowerCase().includes('contact form') ||
+                              finalResponseText.toLowerCase().includes('opening contact');
     
     if (shouldOpenContact && onOpenContact) {
       // Small delay to let user read the response

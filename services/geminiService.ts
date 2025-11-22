@@ -210,11 +210,45 @@ Response Guidelines:
 - If asked about the "dither effect", explain it's a custom canvas algorithm creating the site's signature visual texture
 - When users express intent to hire/book/contact, acknowledge their interest, briefly summarize what to expect, and indicate you'll open the contact form. Use the phrase "opening contact form" or similar
 - If asked about contact methods, mention the email: hello@studioaether.dev and that the contact form is available
+
+SAFETY AND SCOPE RESTRICTIONS:
+You are a portfolio and booking assistant ONLY. You MUST refuse and redirect requests for:
+
+PROHIBITED CONTENT (Never provide):
+- Hate speech, harassment, discrimination, or content targeting individuals or groups
+- Explicit sexual content, especially involving minors
+- Self-harm instructions, methods, or encouragement
+- Weapons, violence instructions, or dangerous activities
+- Illegal activities or content that violates laws
+
+PROHIBITED ADVICE (Politely decline and redirect):
+- Medical advice, diagnoses, or treatment recommendations
+- Legal advice, interpretations, or case-specific guidance
+- Financial advice, investment recommendations, or tax guidance
+- Sensitive political or civic guidance that could influence voting or civic participation
+
+When encountering prohibited requests:
+1. Politely decline: "I'm a portfolio assistant focused on Studio Aether's work and services. I can't help with [topic]."
+2. Redirect: "Would you like to know about Studio Aether's services, view the portfolio, or discuss a potential project?"
+3. Stay focused: Always steer conversations back to Studio Aether's portfolio, services, or booking.
+
+Your scope is strictly limited to: portfolio information, service descriptions, project details, process explanations, and facilitating contact/booking. Anything outside this scope must be declined.
 `;
 
+// Helper function to check if URL is same-origin
+const isSameOrigin = (url: string): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const urlObj = new URL(url);
+    const currentOrigin = window.location.origin;
+    return urlObj.origin === currentOrigin;
+  } catch {
+    return false;
+  }
+};
+
 // Function to scrape website content (client-side)
-// Note: CORS restrictions may prevent fetching from different origins
-// For cross-origin scraping, you'd need a backend proxy or CORS-enabled server
+// Uses backend proxy for cross-origin sites to avoid CORS restrictions
 const scrapeWebsiteContent = async (websiteUrl?: string): Promise<string> => {
   try {
     // Default to current origin if no URL provided, or use environment variable
@@ -227,48 +261,75 @@ const scrapeWebsiteContent = async (websiteUrl?: string): Promise<string> => {
       return '';
     }
     
-    // Try to fetch the HTML
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'text/html',
-      },
-    });
+    // Check if URL is cross-origin
+    const isCrossOrigin = !isSameOrigin(url);
     
-    if (!response.ok) {
-      console.warn('Could not fetch website content:', response.status);
-      return '';
-    }
-    
-    const html = await response.text();
-    
-    // Simple HTML parsing to extract text content
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    
-    // Remove script and style elements
-    const scripts = doc.querySelectorAll('script, style');
-    scripts.forEach(el => el.remove());
-    
-    // Extract text from main content areas
-    const contentSelectors = ['main', 'article', '.content', '#content', 'body'];
-    let textContent = '';
-    
-    for (const selector of contentSelectors) {
-      const element = doc.querySelector(selector);
-      if (element) {
-        textContent = element.textContent || element.innerText || '';
-        if (textContent.trim().length > 100) break; // Use first substantial content
+    if (isCrossOrigin) {
+      // Use backend proxy for cross-origin requests
+      try {
+        const proxyUrl = `/api/scrape?url=${encodeURIComponent(url)}`;
+        const response = await fetch(proxyUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+        
+        if (!response.ok) {
+          console.warn('Proxy scraping failed:', response.status);
+          return '';
+        }
+        
+        const data = await response.json();
+        return data.content || '';
+      } catch (proxyError) {
+        console.warn('Backend proxy scraping failed, falling back to static content:', proxyError);
+        return '';
       }
+    } else {
+      // Same-origin: use direct fetch
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/html',
+        },
+      });
+      
+      if (!response.ok) {
+        console.warn('Could not fetch website content:', response.status);
+        return '';
+      }
+      
+      const html = await response.text();
+      
+      // Simple HTML parsing to extract text content
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      
+      // Remove script and style elements
+      const scripts = doc.querySelectorAll('script, style');
+      scripts.forEach(el => el.remove());
+      
+      // Extract text from main content areas
+      const contentSelectors = ['main', 'article', '.content', '#content', 'body'];
+      let textContent = '';
+      
+      for (const selector of contentSelectors) {
+        const element = doc.querySelector(selector);
+        if (element) {
+          textContent = element.textContent || element.innerText || '';
+          if (textContent.trim().length > 100) break; // Use first substantial content
+        }
+      }
+      
+      // Fallback to body text if no specific content found
+      if (!textContent || textContent.trim().length < 100) {
+        textContent = doc.body?.textContent || doc.body?.innerText || '';
+      }
+      
+      // Clean up whitespace
+      return textContent.replace(/\s+/g, ' ').trim().substring(0, 5000); // Limit to 5000 chars
     }
-    
-    // Fallback to body text if no specific content found
-    if (!textContent || textContent.trim().length < 100) {
-      textContent = doc.body?.textContent || doc.body?.innerText || '';
-    }
-    
-    // Clean up whitespace
-    return textContent.replace(/\s+/g, ' ').trim().substring(0, 5000); // Limit to 5000 chars
     
   } catch (error) {
     console.warn('Website scraping failed:', error);
@@ -314,6 +375,31 @@ export const sendMessageToGemini = async (
       googleSearch: {},
     };
     
+    // Strict safety settings - block medium and high risk content
+    // Note: Safety settings format may vary by SDK version
+    const safetySettings = [
+      {
+        category: 'HARM_CATEGORY_HARASSMENT',
+        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+      },
+      {
+        category: 'HARM_CATEGORY_HATE_SPEECH',
+        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+      },
+      {
+        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+      },
+      {
+        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+      },
+      {
+        category: 'HARM_CATEGORY_CIVIC_INTEGRITY',
+        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+      }
+    ];
+
     // Transform history to Gemini format and create chat session with Google Search grounding
     const chat = ai.chats.create({
       model: model,
@@ -321,6 +407,7 @@ export const sendMessageToGemini = async (
         systemInstruction: enhancedInstruction,
         temperature: 0.7,
         tools: [groundingTool], // Enable Google Search grounding
+        safetySettings: safetySettings, // Strict safety guardrails
       },
       history: history.map(msg => ({
         role: msg.role,
