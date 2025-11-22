@@ -83,7 +83,7 @@ export const ContactOverlay: React.FC<Props> = ({ onClose }) => {
         <div className="flex justify-between items-center p-6 border-b border-stone-800">
            <div className="flex items-center gap-3">
              <Mail className="w-5 h-5 text-stone-400" />
-             <span className="font-mono text-xs uppercase tracking-[0.2em] font-bold">Transmission_Link</span>
+             <span className="font-mono text-xs uppercase tracking-[0.2em] font-bold">Contact Me</span>
            </div>
            <button onClick={onClose} className="group hover:text-white transition-colors border border-transparent hover:border-stone-700 p-2">
              <X className="w-5 h-5" />
@@ -166,10 +166,16 @@ export const ContactOverlay: React.FC<Props> = ({ onClose }) => {
                     </div>
                     <h3 className="text-2xl font-medium text-white">Transmission Received</h3>
                     <p className="text-stone-400 font-mono text-sm max-w-md">
-                        Your data has been successfully captured by the system. We will process your request and respond shortly.
+                        Message sent successfully. We will respond shortly.
                     </p>
-                    <button onClick={onClose} className="mt-8 border border-stone-700 text-stone-400 px-6 py-3 font-mono text-xs uppercase hover:border-sand hover:text-sand transition-colors">
-                        Return to Grid
+                    <button 
+                        onClick={() => {
+                            onClose();
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }} 
+                        className="mt-8 border border-stone-700 text-stone-400 px-6 py-3 font-mono text-xs uppercase hover:border-sand hover:text-sand transition-colors"
+                    >
+                        Home
                     </button>
                 </div>
             )}
