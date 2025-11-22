@@ -95,8 +95,8 @@ export const ContactOverlay: React.FC<Props> = ({ onClose }) => {
             {!isSent ? (
                 <div className="space-y-8">
                     <div className="space-y-2">
-                        <h2 className="text-3xl font-medium tracking-tight text-white">Initialize Contact</h2>
-                        <p className="text-stone-400 font-mono text-sm">Send a secure message to the studio.</p>
+                        <h2 className="text-3xl font-medium tracking-tight text-white">Ready to start the process</h2>
+                        <p className="text-stone-400 font-mono text-sm">Send your query</p>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
@@ -164,7 +164,7 @@ export const ContactOverlay: React.FC<Props> = ({ onClose }) => {
                     <div className="w-16 h-16 bg-sand text-ink flex items-center justify-center rounded-none">
                         <Send className="w-8 h-8" />
                     </div>
-                    <h3 className="text-2xl font-medium text-white">Transmission Received</h3>
+                    <h3 className="text-2xl font-medium text-white">Query Received</h3>
                     <p className="text-stone-400 font-mono text-sm max-w-md">
                         Message sent successfully. We will respond shortly.
                     </p>
