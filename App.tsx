@@ -201,7 +201,7 @@ function App() {
       </div>
 
       {/* Floating Chat */}
-      <AIChat />
+      <AIChat onOpenContact={() => setIsContactOpen(true)} />
     </div>
   );
 }
