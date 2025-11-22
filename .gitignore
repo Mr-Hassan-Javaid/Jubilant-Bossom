@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 .env.local*
 .env*
+
+# Vite configuration files (may contain sensitive info)
+vite.config.ts
+vite-env.d.ts
