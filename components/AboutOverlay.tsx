@@ -3,6 +3,7 @@ import { X, Fingerprint, Target, Zap, ArrowRight } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
+  onOpenContact?: () => void;
 }
 
 interface SystemItem {
@@ -39,7 +40,7 @@ const systemItems: SystemItem[] = [
   }
 ];
 
-export const AboutOverlay: React.FC<Props> = ({ onClose }) => {
+export const AboutOverlay: React.FC<Props> = ({ onClose, onOpenContact }) => {
   const [activeItem, setActiveItem] = useState<SystemItem | null>(null);
 
   useEffect(() => {
@@ -131,8 +132,14 @@ export const AboutOverlay: React.FC<Props> = ({ onClose }) => {
                     <p className="text-stone-300 leading-relaxed mb-8">
                         Most portfolios are static images. Mine is running code. I bring that same level of execution to your projects. I don't just hand off mockups; I deliver production-ready assets, design systems that scale, and logic that works.
                     </p>
-                    <button onClick={onClose} className="self-start border border-sand px-6 py-3 text-xs font-mono uppercase hover:bg-sand hover:text-ink transition-colors">
-                        View My Work
+                    <button 
+                        onClick={() => {
+                            onClose();
+                            onOpenContact?.();
+                        }} 
+                        className="self-start border border-sand px-6 py-3 text-xs font-mono uppercase hover:bg-sand hover:text-ink transition-colors"
+                    >
+                        Start the Process
                     </button>
                  </div>
                </div>

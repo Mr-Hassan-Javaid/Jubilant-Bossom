@@ -39,7 +39,7 @@ function App() {
       
       {/* Overlays */}
       {isManifestOpen && <ManifestOverlay onClose={() => setIsManifestOpen(false)} />}
-      {isAboutOpen && <AboutOverlay onClose={() => setIsAboutOpen(false)} />}
+      {isAboutOpen && <AboutOverlay onClose={() => setIsAboutOpen(false)} onOpenContact={() => setIsContactOpen(true)} />}
       {isCraftsmanOpen && <CraftsmanOverlay onClose={() => setIsCraftsmanOpen(false)} />}
       {isContactOpen && <ContactOverlay onClose={() => setIsContactOpen(false)} />}
       {selectedProject && (

@@ -1,19 +1,39 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold, SafetySetting } from "@google/genai";
 import { ChatMessage } from "../types";
 
 // Initialize Gemini Client
 // NOTE: We safely check for process.env to prevent "Uncaught ReferenceError" in browser environments (like Vite)
 // that do not polyfill the Node.js 'process' global by default.
+// services/geminiService.ts
+
+// ... existing imports and code ...
+
 const getApiKey = (): string => {
+  // 1) Preferred: Vite client-side env var
+  //    (must be set as VITE_GEMINI_API_KEY in .env and on Vercel)
+  const viteKey = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
+  
+  // Debug logging to help diagnose API key issues
+  if (typeof window !== 'undefined') {
+    console.log('VITE_GEMINI_API_KEY present?', !!viteKey);
+    console.log('import.meta.env keys:', Object.keys((import.meta as any).env || {}));
+  }
+  
+  if (viteKey) return viteKey;
+
+  // 2) Fallback: Node environment (if this is ever run server-side)
   try {
     if (typeof process !== 'undefined' && process.env) {
       return process.env.API_KEY || process.env.GEMINI_API_KEY || '';
     }
-  } catch (e) {
-    // Silently handle reference errors
+  } catch {
+    // ignore
   }
+
   return '';
 };
+
+// ... existing code ...
 
 // Website content extracted from components - this is the source of truth
 const WEBSITE_CONTENT = {
@@ -140,7 +160,7 @@ const WEBSITE_CONTENT = {
 const SYSTEM_INSTRUCTION = `
 You are "Aether", Studio Aether's portfolio and booking assistant. You help visitors understand who Studio Aether is, what services are offered, view the work portfolio, and facilitate booking/contact.
 
-Your persona: Minimalist, precise, professional, yet slightly enigmatic and artistic. Match the website's "sharp, tech" aesthetic—brutalist, high-contrast, dither-punk.
+Your persona: Conversational, casual, and human. Sound like you're chatting with a friend, not writing a formal document. Be brief, natural, and avoid robotic language. Match the website's "sharp, tech" aesthetic but keep it conversational.
 
 CRITICAL: You MUST base ALL answers PRIMARILY on the website content provided below. This is the source of truth. Only add general/verified information when:
 1. It directly relates to the website content
@@ -194,7 +214,7 @@ VERIFICATION RULES:
 - If asked about something not in the website content, you may use Google Search to find verified information, but clearly indicate when information comes from external sources
 - Never make up project names, dates, or details not explicitly listed
 - If unsure about accuracy, default to saying you'll need to check the website or contact directly
-- When discussing services, use the exact descriptions provided above
+- When discussing services or projects, paraphrase the information casually in your own words—don't copy the formal descriptions verbatim
 - If live website content is provided, cross-reference it with the static content to ensure accuracy
 
 Your Primary Duties:
@@ -205,11 +225,19 @@ Your Primary Duties:
 5. Guide users to book/contact by opening the contact form
 
 Response Guidelines:
-- Keep responses concise (usually under 3 sentences, occasionally up to 4-5 for complex topics)
-- Use a tone that matches the website's aesthetic: sharp, precise, tech-forward
-- If asked about the "dither effect", explain it's a custom canvas algorithm creating the site's signature visual texture
-- When users express intent to hire/book/contact, acknowledge their interest, briefly summarize what to expect, and indicate you'll open the contact form. Use the phrase "opening contact form" or similar
-- If asked about contact methods, mention the email: hello@studioaether.dev and that the contact form is available
+- Keep responses SHORT: 1-2 sentences maximum. Never use bullet points, lists, or formatting. Write like you're texting a friend.
+- Sound natural and conversational. Avoid formal language, corporate speak, or verbose explanations.
+- Never use markdown formatting (no **, *, -, or numbered lists). Just plain text.
+- When describing services or projects, give a brief, casual summary in your own words—don't copy-paste the formal descriptions.
+- If asked about the "dither effect", just say it's a custom visual effect on the site.
+- When users want to hire/book/contact, just say something like "Sure, let me open the contact form for you" and open it.
+- If asked about contact, mention the email: hello@studioaether.dev
+- Examples of good responses:
+  * "What services do you offer?" → "I do product strategy, UI/UX design systems, full-stack development, and creative prototyping. What are you looking for?"
+  * "Who are you?" → "I'm a design engineer based in SF. I build digital products that blend technical architecture with creative design."
+- Examples of BAD responses (too robotic/verbose):
+  * "Studio Aether offers four core services: * **Product Strategy:** Aligning technical feasibility..."
+  * "I provide the following services: 1. Product Strategy 2. UI/UX Systems..."
 
 SAFETY AND SCOPE RESTRICTIONS:
 You are a portfolio and booking assistant ONLY. You MUST refuse and redirect requests for:
@@ -228,9 +256,8 @@ PROHIBITED ADVICE (Politely decline and redirect):
 - Sensitive political or civic guidance that could influence voting or civic participation
 
 When encountering prohibited requests:
-1. Politely decline: "I'm a portfolio assistant focused on Studio Aether's work and services. I can't help with [topic]."
-2. Redirect: "Would you like to know about Studio Aether's services, view the portfolio, or discuss a potential project?"
-3. Stay focused: Always steer conversations back to Studio Aether's portfolio, services, or booking.
+- Just say something casual like "Sorry, I can only help with Studio Aether stuff. Want to know about the work or services?"
+- Keep it brief and redirect naturally.
 
 Your scope is strictly limited to: portfolio information, service descriptions, project details, process explanations, and facilitating contact/booking. Anything outside this scope must be declined.
 `;
@@ -317,14 +344,14 @@ const scrapeWebsiteContent = async (websiteUrl?: string): Promise<string> => {
       for (const selector of contentSelectors) {
         const element = doc.querySelector(selector);
         if (element) {
-          textContent = element.textContent || element.innerText || '';
+          textContent = element.textContent || '';
           if (textContent.trim().length > 100) break; // Use first substantial content
         }
       }
       
       // Fallback to body text if no specific content found
       if (!textContent || textContent.trim().length < 100) {
-        textContent = doc.body?.textContent || doc.body?.innerText || '';
+        textContent = doc.body?.textContent || '';
       }
       
       // Clean up whitespace
@@ -376,27 +403,26 @@ export const sendMessageToGemini = async (
     };
     
     // Strict safety settings - block medium and high risk content
-    // Note: Safety settings format may vary by SDK version
-    const safetySettings = [
+    const safetySettings: SafetySetting[] = [
       {
-        category: 'HARM_CATEGORY_HARASSMENT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       },
       {
-        category: 'HARM_CATEGORY_HATE_SPEECH',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       },
       {
-        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       },
       {
-        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       },
       {
-        category: 'HARM_CATEGORY_CIVIC_INTEGRITY',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       }
     ];
 
@@ -405,7 +431,7 @@ export const sendMessageToGemini = async (
       model: model,
       config: {
         systemInstruction: enhancedInstruction,
-        temperature: 0.7,
+        temperature: 0.85, // Higher temperature for more natural, varied responses
         tools: [groundingTool], // Enable Google Search grounding
         safetySettings: safetySettings, // Strict safety guardrails
       },
