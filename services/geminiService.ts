@@ -1,19 +1,39 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold, SafetySetting } from "@google/genai";
 import { ChatMessage } from "../types";
 
 // Initialize Gemini Client
 // NOTE: We safely check for process.env to prevent "Uncaught ReferenceError" in browser environments (like Vite)
 // that do not polyfill the Node.js 'process' global by default.
+// services/geminiService.ts
+
+// ... existing imports and code ...
+
 const getApiKey = (): string => {
+  // 1) Preferred: Vite client-side env var
+  //    (must be set as VITE_GEMINI_API_KEY in .env and on Vercel)
+  const viteKey = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
+  
+  // Debug logging to help diagnose API key issues
+  if (typeof window !== 'undefined') {
+    console.log('VITE_GEMINI_API_KEY present?', !!viteKey);
+    console.log('import.meta.env keys:', Object.keys((import.meta as any).env || {}));
+  }
+  
+  if (viteKey) return viteKey;
+
+  // 2) Fallback: Node environment (if this is ever run server-side)
   try {
     if (typeof process !== 'undefined' && process.env) {
       return process.env.API_KEY || process.env.GEMINI_API_KEY || '';
     }
-  } catch (e) {
-    // Silently handle reference errors
+  } catch {
+    // ignore
   }
+
   return '';
 };
+
+// ... existing code ...
 
 // Website content extracted from components - this is the source of truth
 const WEBSITE_CONTENT = {
@@ -317,14 +337,14 @@ const scrapeWebsiteContent = async (websiteUrl?: string): Promise<string> => {
       for (const selector of contentSelectors) {
         const element = doc.querySelector(selector);
         if (element) {
-          textContent = element.textContent || element.innerText || '';
+          textContent = element.textContent || '';
           if (textContent.trim().length > 100) break; // Use first substantial content
         }
       }
       
       // Fallback to body text if no specific content found
       if (!textContent || textContent.trim().length < 100) {
-        textContent = doc.body?.textContent || doc.body?.innerText || '';
+        textContent = doc.body?.textContent || '';
       }
       
       // Clean up whitespace
@@ -376,27 +396,26 @@ export const sendMessageToGemini = async (
     };
     
     // Strict safety settings - block medium and high risk content
-    // Note: Safety settings format may vary by SDK version
-    const safetySettings = [
+    const safetySettings: SafetySetting[] = [
       {
-        category: 'HARM_CATEGORY_HARASSMENT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       },
       {
-        category: 'HARM_CATEGORY_HATE_SPEECH',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       },
       {
-        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       },
       {
-        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       },
       {
-        category: 'HARM_CATEGORY_CIVIC_INTEGRITY',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE'
+        category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
       }
     ];
 
